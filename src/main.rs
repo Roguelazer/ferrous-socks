@@ -113,7 +113,7 @@ async fn main() -> anyhow::Result<()> {
         };
         conf.dump(dump_path)?;
         if let Some(path) = dump_path {
-            println!("Config dumped to {:?}", path);
+            println!("Config dumped to {path:?}");
         }
         return Ok(());
     };
@@ -150,10 +150,7 @@ async fn main() -> anyhow::Result<()> {
                 conf.stats_socket_mode.clone(),
             )
             .with_context(|| {
-                format!(
-                    "failed to bind to domain socket {:?}",
-                    stats_socket_listen_address,
-                )
+                format!("failed to bind to domain socket {stats_socket_listen_address:?}",)
             })?;
             tokio::spawn(server.run_unix(listener));
         } else {
@@ -164,10 +161,7 @@ async fn main() -> anyhow::Result<()> {
             let listener = tokio::net::TcpListener::bind(stats_socket_listen_address)
                 .await
                 .with_context(|| {
-                    format!(
-                        "failed to bind to TCP socket {:?}",
-                        stats_socket_listen_address
-                    )
+                    format!("failed to bind to TCP socket {stats_socket_listen_address:?}")
                 })?;
             tokio::spawn(server.run_tcp(listener));
         }
