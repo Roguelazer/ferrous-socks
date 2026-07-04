@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use tap::Conv;
 use thiserror::Error;
 
 use crate::acl::{Acl, AclAction, AclItem};
@@ -19,11 +20,11 @@ pub enum ConfigError {
     Deserialization(#[from] toml::de::Error),
 }
 
-fn _true() -> bool {
+const fn _true() -> bool {
     true
 }
 
-fn _false() -> bool {
+const fn _false() -> bool {
     false
 }
 
@@ -34,101 +35,12 @@ fn _default_bind() -> Vec<IpAddr> {
     ]
 }
 
-fn _default_mode() -> u32 {
+const fn _default_mode() -> u32 {
     0o600
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
-#[allow(non_camel_case_types)]
-#[allow(clippy::upper_case_acronyms)]
-pub enum SyslogFacility {
-    KERN,
-    USER,
-    MAIL,
-    DAEMON,
-    AUTH,
-    SYSLOG,
-    LPR,
-    NEWS,
-    UUCP,
-    CRON,
-    AUTHPRIV,
-    FTP,
-    LOCAL0,
-    LOCAL1,
-    LOCAL2,
-    LOCAL3,
-    LOCAL4,
-    LOCAL5,
-    LOCAL6,
-    LOCAL7,
-}
-
-impl From<SyslogFacility> for syslog::Facility {
-    fn from(s: SyslogFacility) -> syslog::Facility {
-        use SyslogFacility::*;
-        use syslog::Facility::*;
-
-        match s {
-            KERN => LOG_KERN,
-            USER => LOG_USER,
-            MAIL => LOG_MAIL,
-            DAEMON => LOG_DAEMON,
-            AUTH => LOG_AUTH,
-            SYSLOG => LOG_SYSLOG,
-            LPR => LOG_LPR,
-            NEWS => LOG_NEWS,
-            UUCP => LOG_UUCP,
-            CRON => LOG_CRON,
-            AUTHPRIV => LOG_AUTHPRIV,
-            FTP => LOG_FTP,
-            LOCAL0 => LOG_LOCAL0,
-            LOCAL1 => LOG_LOCAL1,
-            LOCAL2 => LOG_LOCAL2,
-            LOCAL3 => LOG_LOCAL3,
-            LOCAL4 => LOG_LOCAL4,
-            LOCAL5 => LOG_LOCAL5,
-            LOCAL6 => LOG_LOCAL6,
-            LOCAL7 => LOG_LOCAL7,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, Copy, Clone)]
-#[allow(non_camel_case_types)]
-#[allow(clippy::upper_case_acronyms)]
-pub enum LogLevel {
-    ERROR,
-    WARN,
-    INFO,
-    DEBUG,
-    TRACE,
-}
-
-impl From<LogLevel> for log::LevelFilter {
-    fn from(ll: LogLevel) -> log::LevelFilter {
-        match ll {
-            LogLevel::ERROR => log::LevelFilter::Error,
-            LogLevel::WARN => log::LevelFilter::Warn,
-            LogLevel::INFO => log::LevelFilter::Info,
-            LogLevel::DEBUG => log::LevelFilter::Debug,
-            LogLevel::TRACE => log::LevelFilter::Trace,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SyslogConfig {
-    pub facility: SyslogFacility,
-    pub level: Option<LogLevel>,
-}
-
-impl SyslogConfig {
-    pub fn initialize_logging(&self, level: log::LevelFilter) {
-        let level = self.level.map(|l| l.into()).unwrap_or(level);
-        syslog::init(self.facility.into(), level, Some(env!("CARGO_PKG_NAME")))
-            .expect("failed to initialize syslog");
-    }
+const fn _default_log_level() -> crate::LogLevel {
+    crate::LogLevel::Info
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -206,7 +118,10 @@ pub struct RawConfig {
     pub expect_proxy: bool,
     #[serde(alias = "reuse-port", default = "_false")]
     pub reuse_port: bool,
-    pub syslog: Option<SyslogConfig>,
+    #[serde(alias = "log-level", default = "_default_log_level")]
+    pub log_level: crate::LogLevel,
+    #[serde(alias = "log-json", default = "_false")]
+    pub log_json: bool,
 }
 
 impl Default for RawConfig {
@@ -227,7 +142,8 @@ impl Default for RawConfig {
             stats_socket_mode: _default_mode(),
             expect_proxy: false,
             reuse_port: false,
-            syslog: None,
+            log_level: _default_log_level(),
+            log_json: false,
         }
     }
 }
@@ -275,7 +191,8 @@ pub struct Config {
     pub stats_socket_mode: Permissions,
     pub expect_proxy: bool,
     pub reuse_port: bool,
-    pub syslog_config: Option<SyslogConfig>,
+    pub log_level: crate::LogLevel,
+    pub log_json: bool,
 }
 
 fn ms_with_default(val: Option<u32>, default: u32) -> Duration {
@@ -304,7 +221,8 @@ impl Config {
             stats_socket_mode: Permissions::from_mode(raw.stats_socket_mode),
             expect_proxy: raw.expect_proxy,
             reuse_port: raw.reuse_port,
-            syslog_config: raw.syslog,
+            log_level: raw.log_level,
+            log_json: raw.log_json,
         }
     }
 
@@ -332,7 +250,8 @@ impl Config {
             stats_socket_mode: self.stats_socket_mode.mode(),
             expect_proxy: self.expect_proxy,
             reuse_port: self.reuse_port,
-            syslog: self.syslog_config,
+            log_level: self.log_level,
+            log_json: self.log_json,
         }
     }
 
@@ -340,17 +259,21 @@ impl Config {
         self.into_raw().dump(path)
     }
 
-    pub fn initialize_logging(&self, options: &crate::LoggingOptions) {
-        let level: log::LevelFilter = options.log_level.into();
-        if let Some(c) = &self.syslog_config
-            && !options.stderr
-        {
-            c.initialize_logging(level)
+    pub fn initialize_logging(&self, options: &crate::CliLogging) {
+        let log_level = options
+            .log_level
+            .unwrap_or(self.log_level)
+            .conv::<tracing_subscriber::filter::LevelFilter>();
+        let builder = tracing_subscriber::fmt()
+            .with_max_level(log_level)
+            .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339());
+        if self.log_json {
+            builder
+                .event_format(tracing_subscriber::fmt::format::json())
+                .init()
         } else {
-            env_logger::Builder::new()
-                .filter_level(level)
-                .format_timestamp_secs()
-                .init();
+            let format = tracing_subscriber::fmt::format().compact();
+            builder.event_format(format).init()
         }
     }
 }

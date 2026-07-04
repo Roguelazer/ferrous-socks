@@ -3,6 +3,8 @@ UNRELEASED
 - Move canonical repository location to <https://github.com/Roguelazer/ferrous-socks>
 - Change primary branch from `master` to `main`
 - Upgrade to Rust 2024; bump MSRV to 1.88.0
+- Replace `log` with `tracing`
+- Remove syslog support
 
 1.0.8
 -----

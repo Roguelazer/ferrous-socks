@@ -6,7 +6,6 @@ use anyhow::Context;
 use byteorder::{ByteOrder, NetworkEndian};
 use futures_util::future::FutureExt;
 use futures_util::stream::StreamExt;
-use log::{debug, error, info, warn};
 use permit::Permit;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -91,7 +90,7 @@ where
             if let Some(username) = authenticate_rfc1929(socket).await? {
                 return Ok(HandshakeResult::AuthenticatedAs(username));
             } else {
-                warn!("1929 authentication failed; aborting");
+                tracing::warn!("RFC1929 authentication failed; aborting");
                 socket.write_all(&[0x1u8, 0xffu8]).await?;
             }
         }
@@ -229,8 +228,8 @@ where
         .await
         {
             Ok(h) => h.context("error reading PROXY protocol")?,
-            Err(e) => {
-                warn!("{}: timeout reading PROXY header: {:?}", conn_id, e);
+            Err(err) => {
+                tracing::warn!(conn_id, ?err, "timeout reading PROXY header");
                 stats.proxy_protocol_timeout();
                 return Ok(false);
             }
@@ -238,12 +237,12 @@ where
         if header.transport != crate::proxy::Transport::Stream {
             anyhow::bail!("Invalid PROXY transport in header {:?}", header);
         }
-        log::trace!("PROXY request {:?}", header);
+        tracing::trace!("PROXY request {:?}", header);
         header.source_address
     } else {
         address
     };
-    debug!("{}: accepted connection from {:?}", conn_id, address);
+    tracing::debug!(?conn_id, ?address, "accepted connection");
     let mut username = None;
     let already_read = match handshake_auth(&mut socket)
         .await
@@ -257,24 +256,24 @@ where
         }
         HandshakeResult::Failed => {
             stats.handshake_failed();
-            debug!("{}: handshake failed", conn_id);
+            tracing::warn!(conn_id, "handshake failed");
             return Ok(false);
         }
         HandshakeResult::Version4(bytes) => Some(bytes),
     };
     stats.handshake_success();
-    debug!("{}: handshake succeeded", conn_id);
+    tracing::trace!(conn_id, "handshake succeeded");
     let request = read_request(&mut socket, already_read, username)
         .await
         .context("error reading request")?;
     if let Some(request) = request {
         if let Some(ref u) = request.username {
-            debug!("{}: authenticated as {:?}", conn_id, u);
+            tracing::trace!(conn_id, username = u, "authenticated");
         } else {
-            debug!("{}: unauthenticated", conn_id);
+            tracing::debug!(conn_id, "unauthenticated");
         }
         let version = request.ver;
-        stats.set_request(conn_id, &request).await;
+        stats.set_request(conn_id, &request);
         let mut conn =
             match tokio::time::timeout(config.connect_timeout, request.clone().connect(&config))
                 .await
@@ -284,37 +283,37 @@ where
                     match c {
                         Ok(Connection::Connected(c)) => c,
                         Ok(Connection::NotAllowed) => {
-                            warn!("{}: denying connection to {:?}", conn_id, request);
+                            tracing::warn!(conn_id, ?request, "denying connection");
                             Reply::ConnectionNotAllowed
                                 .write_error(&mut socket, version)
                                 .await?;
                             return Ok(false);
                         }
                         Ok(Connection::AddressNotSupported) => {
-                            warn!("{}: bad address family to {:?}", conn_id, request);
+                            tracing::warn!(conn_id, ?request, "bad address family");
                             Reply::AddressNotSupported
                                 .write_error(&mut socket, version)
                                 .await?;
                             return Ok(false);
                         }
                         Ok(Connection::SocksFailure) => {
-                            warn!("{}: failure (resolution?) to {:?}", conn_id, request);
+                            tracing::warn!(conn_id, ?request, "failure (resolution?)");
                             Reply::SocksFailure
                                 .write_error(&mut socket, version)
                                 .await?;
                             return Ok(false);
                         }
-                        Err(e) => {
+                        Err(err) => {
                             Reply::NetworkUnreachable
                                 .write_error(&mut socket, version)
                                 .await?;
-                            warn!("error connecting: {:?}", e);
+                            tracing::warn!(conn_id, ?err, ?request, "error connecting");
                             return Ok(false);
                         }
                     }
                 }
-                Err(e) => {
-                    warn!("{}: timeout connecting: {:?}", conn_id, e);
+                Err(err) => {
+                    tracing::warn!(conn_id, ?err, ?request, "timeout connecting");
                     Reply::TtlExpired.write_error(&mut socket, version).await?;
                     stats.handshake_timeout();
                     return Ok(false);
@@ -322,11 +321,8 @@ where
             };
         let remote_end = conn.peer_addr().context("error getting peer address")?;
         let local_end = conn.local_addr().context("error getting local address")?;
-        stats.set_connection(conn_id, local_end, remote_end).await;
-        info!(
-            "{}: connected to {:?} from {:?}",
-            conn_id, remote_end, local_end
-        );
+        stats.set_connection(conn_id, local_end, remote_end);
+        tracing::info!(conn_id, ?remote_end, ?local_end, "session established");
         match version {
             Version::Five => {
                 socket
@@ -375,7 +371,7 @@ async fn handle_one_connection_wrapper(
     stats: Arc<Stats>,
     permit: Permit,
 ) {
-    let conn_id = stats.start_request(address).await;
+    let conn_id = stats.start_request(address);
     if let Some(timeout) = config.total_timeout {
         match tokio::time::timeout(
             timeout,
@@ -386,12 +382,12 @@ async fn handle_one_connection_wrapper(
             Ok(Ok(_)) => {
                 stats.session_success();
             }
-            Ok(Err(e)) => {
+            Ok(Err(err)) => {
                 stats.session_error();
-                error!("error handling session {}: {:?}", conn_id, e);
+                tracing::error!(conn_id, ?err, "error handling session");
             }
             Err(_) => {
-                warn!("session {} timed out!", conn_id);
+                tracing::warn!(conn_id, "session timed out!");
                 stats.session_timeout();
             }
         }
@@ -400,14 +396,14 @@ async fn handle_one_connection_wrapper(
             Ok(_) => {
                 stats.session_success();
             }
-            Err(e) => {
+            Err(err) => {
                 stats.session_error();
-                error!("error handling session {}: {:?}", conn_id, e);
+                tracing::error!(conn_id, ?err, "error handling session");
             }
         }
     }
-    info!("{}: finishing request", conn_id);
-    stats.finish_request(conn_id).await;
+    tracing::info!(conn_id, "finishing request");
+    stats.finish_request(conn_id);
     drop(permit);
 }
 
@@ -440,7 +436,7 @@ async fn handle_connections(
         })
         .fold(0usize, |acc, _| async move { acc.wrapping_add(1) })
         .await;
-    debug!("handled {} connections before getting shut down", handled);
+    tracing::debug!("handled {} connections before getting shut down", handled);
     Ok(())
 }
 
@@ -473,7 +469,7 @@ pub async fn run(
             listener
                 .bind(*addr)
                 .with_context(|| format!("failed to bind to {:?}", addr))?;
-            info!("Listening on: {}", addr);
+            tracing::info!("Listening on: {}", addr);
 
             listener
                 .listen(LISTEN_BACKLOG)
@@ -544,7 +540,7 @@ mod tests {
             lhs.write_all(&hex!("05 02 00 02")).await?;
             let mut buf = [0xffu8; 2];
             lhs.read_exact(&mut buf).await?;
-            assert!(&buf == &[0x05u8, 0x02u8]);
+            assert!(buf == [0x05u8, 0x02u8]);
             lhs.write_all(&hex!("01 04 75736572 07 68756e74657232"))
                 .await?;
             lhs.read_exact(&mut buf).await?;
@@ -564,7 +560,7 @@ mod tests {
             lhs.write_all(&hex!("05 02 00 7f")).await?;
             let mut buf = [0xffu8; 2];
             lhs.read_exact(&mut buf).await?;
-            assert!(&buf == &[0x05u8, 0x00u8]);
+            assert!(buf == [0x05u8, 0x00u8]);
             Ok::<_, tokio::io::Error>(buf)
         });
         let result = handshake_auth(&mut rhs).await.unwrap();

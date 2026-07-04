@@ -1,4 +1,3 @@
-use log::error;
 use std::io::Cursor;
 use std::net::{IpAddr, SocketAddr};
 
@@ -95,13 +94,10 @@ where
         other => return Err(HeaderError::InvalidTransport(other)),
     };
     let source_address = match family {
-        Family::Unix => {
-            error!("remaining data is {}", remaining_len);
-            address
-        }
+        Family::Unix => address,
         Family::Inet => {
             if remaining_len != 12 {
-                error!("expected 12 bytes of address; got {:?}", remaining_len);
+                tracing::error!("expected 12 bytes of address; got {:?}", remaining_len);
                 return Err(HeaderError::InvalidVarData(remaining_len));
             }
             let mut buf = [0u8; 12];

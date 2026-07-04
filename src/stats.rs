@@ -3,9 +3,8 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
-use log::debug;
+use parking_lot::RwLock;
 use serde::Serialize;
-use tokio::sync::RwLock;
 
 use crate::request::{Connection, Request};
 use crate::util::serialize_system_time;
@@ -167,49 +166,48 @@ impl Stats {
         }
     }
 
-    pub async fn start_request(&self, source_address: SocketAddr) -> u64 {
+    pub fn start_request(&self, source_address: SocketAddr) -> u64 {
         self.in_flight.stat_increment();
         let conn_id = self.next_request_id.fetch_add(1, Ordering::SeqCst);
-        let mut lock = self.sessions.write().await;
+        let mut lock = self.sessions.write();
         lock.insert(conn_id, Session::new(source_address));
         conn_id
     }
 
-    pub async fn finish_request(&self, request_id: u64) {
+    pub fn finish_request(&self, request_id: u64) {
         self.in_flight.fetch_sub(1, Ordering::Relaxed);
-        let mut lock = self.sessions.write().await;
+        let mut lock = self.sessions.write();
         lock.remove(&request_id);
     }
 
     pub fn record_traffic(&self, stoc: u64, ctos: u64) {
-        debug!("copied {} bytes from c->s and {} bytes s->c", ctos, stoc);
+        tracing::trace!(
+            "copied {} bytes from client->server and {} bytes server->cclient",
+            ctos,
+            stoc
+        );
         self.bytes_server_to_client
             .fetch_add(stoc, Ordering::Relaxed);
         self.bytes_client_to_server
             .fetch_add(ctos, Ordering::Relaxed);
     }
 
-    pub async fn set_request(&self, request_id: u64, request: &Request) {
-        let mut lock = self.sessions.write().await;
+    pub fn set_request(&self, request_id: u64, request: &Request) {
+        let mut lock = self.sessions.write();
         if let Some(s) = lock.get_mut(&request_id) {
             s.set_request(request)
         }
     }
 
-    pub async fn set_connection(
-        &self,
-        request_id: u64,
-        local_end: SocketAddr,
-        remote_end: SocketAddr,
-    ) {
-        let mut lock = self.sessions.write().await;
+    pub fn set_connection(&self, request_id: u64, local_end: SocketAddr, remote_end: SocketAddr) {
+        let mut lock = self.sessions.write();
         if let Some(s) = lock.get_mut(&request_id) {
             s.set_connection(InFlightConnection::new(local_end, remote_end))
         }
     }
 
-    pub async fn serialize_to_vec(&self) -> Result<Vec<u8>, serde_json::error::Error> {
-        let lock = self.sessions.read().await;
+    pub fn serialize_to_vec(&self) -> Result<Vec<u8>, serde_json::error::Error> {
+        let lock = self.sessions.read();
         let buf = DumpableStats {
             handshake_failed: self.handshake_failed.load_stat(),
             handshake_success: self.handshake_success.load_stat(),
