@@ -36,7 +36,7 @@ struct Cli {
     /// Dump out config (with defaults interpolated) to the given path; - means stdout
     dump_config: Option<PathBuf>,
     #[command(flatten, next_help_heading = "LOGGING OPTIONS")]
-    logging: LoggingOptions,
+    logging: CliLogging,
 }
 
 #[derive(
@@ -51,8 +51,11 @@ struct Cli {
     strum::Display,
     strum::IntoStaticStr,
     strum::EnumString,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 #[strum(serialize_all = "snake_case")]
+#[serde(rename_all = "snake_case")]
 enum LogLevel {
     Error,
     Warn,
@@ -75,13 +78,10 @@ impl From<LogLevel> for tracing_subscriber::filter::LevelFilter {
 }
 
 #[derive(Args)]
-struct LoggingOptions {
-    #[clap(short = 'L', long = "log-level", default_value_t = LogLevel::Warn)]
-    /// Log level
-    log_level: LogLevel,
-    /// Log as JSON instead of human-readable text
-    #[clap(long = "json")]
-    json: bool,
+struct CliLogging {
+    #[clap(short = 'L', long = "log-level")]
+    /// Log level; overrides any value in the config
+    log_level: Option<LogLevel>,
 }
 
 async fn any_shutdown_signal() {

@@ -44,3 +44,6 @@ acl-default-action = "Reject"
 expect-proxy = false
 # whether or not to set SO_REUSEPORT on supported platforms
 reuse-port = false
+
+log-level = "info"
+log-json = false
