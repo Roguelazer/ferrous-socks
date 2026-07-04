@@ -36,9 +36,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.0
       - name: Install rust
+        id: install-rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          key: "${{ steps.install-rust.outputs.cachekey }}"
       - uses: taiki-e/install-action@bffeee26d4db9be238a4ea78d8826604ebcb594d # v2.82.5
         with:
           tool: nextest@0.9.126

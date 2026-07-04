@@ -1,10 +1,8 @@
 name: pre-commit
-
 on:
   workflow_call:
   push:
     branches: [master, main]
-
 jobs:
   typos:
     name: Validate prek
