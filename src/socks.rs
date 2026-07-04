@@ -235,7 +235,7 @@ where
             }
         };
         if header.transport != crate::proxy::Transport::Stream {
-            anyhow::bail!("Invalid PROXY transport in header {:?}", header);
+            anyhow::bail!("Invalid PROXY transport in header {header:?}");
         }
         tracing::trace!("PROXY request {:?}", header);
         header.source_address
@@ -468,7 +468,7 @@ pub async fn run(
 
             listener
                 .bind(*addr)
-                .with_context(|| format!("failed to bind to {:?}", addr))?;
+                .with_context(|| format!("failed to bind to {addr:?}"))?;
             tracing::info!("Listening on: {}", addr);
 
             listener
