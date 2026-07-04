@@ -174,7 +174,7 @@ impl<'t> Iterator for ListenAddressIter<'t> {
 }
 
 impl ListenAddress {
-    pub fn iter(&self) -> ListenAddressIter {
+    pub fn iter(&self) -> ListenAddressIter<'_> {
         ListenAddressIter::new(self)
     }
 }
@@ -343,7 +343,7 @@ impl Config {
             .value_of_t_or_exit::<String>("log_level")
             .parse()
             .expect("Invalid --log-level");
-        // this is gross but semantically equivalnet to the illegal `if let Some(ref c) = self.syslog_config && !matches.is_present("stderr")`
+        // this is gross but semantically equivalent to the illegal `if let Some(ref c) = self.syslog_config && !matches.is_present("stderr")`
         if let Some(c) = (!matches.is_present("stderr"))
             .then(|| self.syslog_config.as_ref())
             .flatten()
