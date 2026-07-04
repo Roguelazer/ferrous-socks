@@ -70,3 +70,19 @@ jobs:
       - uses: actions/checkout@v7.0.0
       - name: Check
         uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
+  ci-required-steps:
+    name: CI Required Steps
+    needs: [lint, test, audit]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Meta-check
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          for result in $results; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "A required check failed or was cancelled (results: $results)"
+              exit 1
+            fi
+          done
+          echo "All required checks passed or were skipped (results: $results)"
