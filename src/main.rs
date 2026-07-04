@@ -79,9 +79,9 @@ struct LoggingOptions {
     #[clap(short = 'L', long = "log-level", default_value_t = LogLevel::Warn)]
     /// Log level
     log_level: LogLevel,
-    #[clap(short = 'E', long = "stderr")]
-    /// Force logging to stderr
-    stderr: bool,
+    /// Log as JSON instead of human-readable text
+    #[clap(long = "json")]
+    json: bool,
 }
 
 async fn any_shutdown_signal() {
@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    conf.initialize_logging(&cli.logging)?;
+    conf.initialize_logging(&cli.logging);
 
     let stats = Arc::new(stats::Stats::new());
 

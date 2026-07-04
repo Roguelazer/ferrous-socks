@@ -44,11 +44,3 @@ acl-default-action = "Reject"
 expect-proxy = false
 # whether or not to set SO_REUSEPORT on supported platforms
 reuse-port = false
-
-# if this section isn't present, then we will log to stderr
-# can send to a unix domain socket, UDP, or TCP; always sends RFC5424 messages
-#[syslog]
-#facility = "LOCAL0"
-#target = { unix = "./syslog.sock" }
-#target = { network = "udp://localhost:514" }
-#target = { network = "tcp://localhost:15514" }

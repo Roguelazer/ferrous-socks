@@ -3,15 +3,11 @@ use std::fs::Permissions;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tracing::Subscriber;
-use tracing_rfc_5424::layer::Layer as FLayer;
-use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::acl::{Acl, AclAction, AclItem};
 
@@ -40,147 +36,6 @@ fn _default_bind() -> Vec<IpAddr> {
 
 fn _default_mode() -> u32 {
     0o600
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
-#[allow(non_camel_case_types)]
-#[allow(clippy::upper_case_acronyms)]
-pub enum SyslogFacility {
-    KERN,
-    USER,
-    MAIL,
-    DAEMON,
-    AUTH,
-    SYSLOG,
-    LPR,
-    NEWS,
-    UUCP,
-    CRON,
-    AUTHPRIV,
-    FTP,
-    LOCAL0,
-    LOCAL1,
-    LOCAL2,
-    LOCAL3,
-    LOCAL4,
-    LOCAL5,
-    LOCAL6,
-    LOCAL7,
-}
-
-impl From<SyslogFacility> for tracing_rfc_5424::facility::Facility {
-    fn from(s: SyslogFacility) -> tracing_rfc_5424::facility::Facility {
-        use SyslogFacility::*;
-        use tracing_rfc_5424::facility::Facility::*;
-
-        match s {
-            KERN => LOG_KERN,
-            USER => LOG_USER,
-            MAIL => LOG_MAIL,
-            DAEMON => LOG_DAEMON,
-            AUTH => LOG_AUTH,
-            SYSLOG => LOG_SYSLOG,
-            LPR => LOG_LPR,
-            NEWS => LOG_NEWS,
-            UUCP => LOG_UUCP,
-            CRON => LOG_CRON,
-            AUTHPRIV => LOG_AUTHPRIV,
-            FTP => LOG_FTP,
-            LOCAL0 => LOG_LOCAL0,
-            LOCAL1 => LOG_LOCAL1,
-            LOCAL2 => LOG_LOCAL2,
-            LOCAL3 => LOG_LOCAL3,
-            LOCAL4 => LOG_LOCAL4,
-            LOCAL5 => LOG_LOCAL5,
-            LOCAL6 => LOG_LOCAL6,
-            LOCAL7 => LOG_LOCAL7,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub enum SyslogTarget {
-    /// Send to a UNIX domain socket at the given path
-    #[serde(rename = "unix")]
-    UnixDomainSocket(PathBuf),
-    /// Send to a network socket. Use udp:// to send over UDP and tcp:// to send over TCP; all
-    /// other protocols are forbidden.
-    #[serde(rename = "network")]
-    Network(url::Url),
-}
-
-impl Default for SyslogTarget {
-    fn default() -> Self {
-        Self::Network(url::Url::parse("udp://localhost:514").unwrap())
-    }
-}
-
-impl SyslogTarget {
-    fn layer<S>(
-        &self,
-        formatter: tracing_rfc_5424::rfc5424::Rfc5424,
-    ) -> anyhow::Result<Box<dyn Layer<S> + Send + Sync + 'static>>
-    where
-        S: Subscriber
-            + for<'a> tracing_subscriber::registry::LookupSpan<'a>
-            + Send
-            + Sync
-            + Sized
-            + 'static,
-    {
-        match self {
-            Self::UnixDomainSocket(path) => Ok(FLayer::with_transport_and_syslog_formatter(
-                tracing_rfc_5424::transport::UnixSocket::new(path)
-                    .context("connecting to syslog unix domain socket")?,
-                formatter,
-            )
-            .boxed()),
-            Self::Network(url) => {
-                let addr = (
-                    url.host_str().unwrap_or("localhost"),
-                    url.port().unwrap_or(514),
-                );
-                let layer = match url.scheme() {
-                    "udp" => FLayer::with_transport_and_syslog_formatter(
-                        tracing_rfc_5424::transport::UdpTransport::new(addr)?,
-                        formatter,
-                    )
-                    .boxed(),
-                    "tcp" => FLayer::with_transport_and_syslog_formatter(
-                        tracing_rfc_5424::transport::TcpTransport::new(addr)?,
-                        formatter,
-                    )
-                    .boxed(),
-                    other => anyhow::bail!("Invalid protocol {other}"),
-                };
-                Ok(layer)
-            }
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct SyslogConfig {
-    pub facility: SyslogFacility,
-    #[serde(default)]
-    pub target: SyslogTarget,
-}
-
-impl SyslogConfig {
-    pub fn init_logging<S>(&self) -> anyhow::Result<Box<dyn Layer<S> + Send + Sync + 'static>>
-    where
-        S: Subscriber
-            + for<'a> tracing_subscriber::registry::LookupSpan<'a>
-            + Send
-            + Sync
-            + Sized
-            + 'static,
-    {
-        let formatter = tracing_rfc_5424::rfc5424::Rfc5424::builder()
-            .facility(self.facility.into())
-            .build();
-        self.target.layer(formatter)
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -258,7 +113,6 @@ pub struct RawConfig {
     pub expect_proxy: bool,
     #[serde(alias = "reuse-port", default = "_false")]
     pub reuse_port: bool,
-    pub syslog: Option<SyslogConfig>,
 }
 
 impl Default for RawConfig {
@@ -279,7 +133,6 @@ impl Default for RawConfig {
             stats_socket_mode: _default_mode(),
             expect_proxy: false,
             reuse_port: false,
-            syslog: None,
         }
     }
 }
@@ -327,7 +180,6 @@ pub struct Config {
     pub stats_socket_mode: Permissions,
     pub expect_proxy: bool,
     pub reuse_port: bool,
-    pub syslog_config: Option<SyslogConfig>,
 }
 
 fn ms_with_default(val: Option<u32>, default: u32) -> Duration {
@@ -356,7 +208,6 @@ impl Config {
             stats_socket_mode: Permissions::from_mode(raw.stats_socket_mode),
             expect_proxy: raw.expect_proxy,
             reuse_port: raw.reuse_port,
-            syslog_config: raw.syslog,
         }
     }
 
@@ -384,7 +235,6 @@ impl Config {
             stats_socket_mode: self.stats_socket_mode.mode(),
             expect_proxy: self.expect_proxy,
             reuse_port: self.reuse_port,
-            syslog: self.syslog_config,
         }
     }
 
@@ -392,22 +242,18 @@ impl Config {
         self.into_raw().dump(path)
     }
 
-    pub fn initialize_logging(&self, options: &crate::LoggingOptions) -> anyhow::Result<()> {
+    pub fn initialize_logging(&self, options: &crate::LoggingOptions) {
         let level: tracing_subscriber::filter::LevelFilter = options.log_level.into();
-        if let Some(c) = &self.syslog_config
-            && !options.stderr
-        {
-            let layer = c.init_logging()?;
-            let dispatch: tracing::Dispatch = tracing_subscriber::Registry::default()
-                .with(layer.with_filter(level))
-                .into();
-            dispatch.init();
+        let builder = tracing_subscriber::fmt()
+            .with_max_level(level)
+            .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339());
+        if options.json {
+            builder
+                .event_format(tracing_subscriber::fmt::format::json())
+                .init()
         } else {
-            tracing_subscriber::fmt()
-                .with_max_level(level)
-                .with_timer(tracing_subscriber::fmt::time::ChronoLocal::rfc_3339())
-                .init();
+            let format = tracing_subscriber::fmt::format().compact();
+            builder.event_format(format).init()
         }
-        Ok(())
     }
 }
