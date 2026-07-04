@@ -6,20 +6,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
 jobs:
-  style:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.0
-      - name: Install rust
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
-        with:
-          toolchain: stable
-          components: rustfmt
-      - name: cargo fmt -- --check
-        run: cargo fmt --all -- --check
   check-unused-deps:
-    name: Dependencies
+    name: Prune Unused Dependencies
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.0
@@ -27,7 +15,17 @@ jobs:
         with:
           tool: cargo-machete
       - run: cargo machete
+  sort-cargo-toml:
+    name: Sort Cargo.toml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.0
+      - uses: taiki-e/install-action@bffeee26d4db9be238a4ea78d8826604ebcb594d # v2.82.5
+        with:
+          tool: cargo-sort
+      - run: cargo sort
   lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,12 +35,14 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
-          components: clippy
+          components: rustfmt,clippy
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           key: "${{ steps.install-rust.outputs.cachekey }}"
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo fmt --all -- --check
   test:
+    name: Run Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -64,8 +64,25 @@ jobs:
       - name: Test
         run: cargo nextest run
   audit:
+    name: Run cargo-deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.0
       - name: Check
         uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe # v2.0.20
+  ci-required-steps:
+    name: CI Required Steps
+    needs: [lint, test, audit]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Meta-check
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          for result in $results; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "A required check failed or was cancelled (results: $results)"
+              exit 1
+            fi
+          done
+          echo "All required checks passed or were skipped (results: $results)"
