@@ -115,13 +115,13 @@ mod tests {
         let localhost = "127.0.0.1".parse::<IpAddr>().unwrap();
         let non_localhost = "1.1.1.1".parse::<IpAddr>().unwrap();
         let two_network = "2.1.1.1".parse::<IpAddr>().unwrap();
-        assert_eq!(acl.is_permitted(None, localhost, 22), true);
-        assert_eq!(acl.is_permitted(None, non_localhost, 22), false);
-        assert_eq!(acl.is_permitted(None, non_localhost, 80), true);
-        assert_eq!(acl.is_permitted(None, non_localhost, 443), true);
-        assert_eq!(acl.is_permitted(None, two_network, 443), false);
-        assert_eq!(acl.is_permitted(Some("nobody"), non_localhost, 80), true);
-        assert_eq!(acl.is_permitted(Some("evil"), non_localhost, 80), false);
-        assert_eq!(acl.is_permitted(Some("backdoor"), non_localhost, 22), true);
+        assert!(acl.is_permitted(None, localhost, 22));
+        assert!(!acl.is_permitted(None, non_localhost, 22));
+        assert!(acl.is_permitted(None, non_localhost, 80));
+        assert!(acl.is_permitted(None, non_localhost, 443));
+        assert!(!acl.is_permitted(None, two_network, 443));
+        assert!(acl.is_permitted(Some("nobody"), non_localhost, 80));
+        assert!(!acl.is_permitted(Some("evil"), non_localhost, 80));
+        assert!(acl.is_permitted(Some("backdoor"), non_localhost, 22));
     }
 }

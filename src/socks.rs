@@ -540,7 +540,7 @@ mod tests {
             lhs.write_all(&hex!("05 02 00 02")).await?;
             let mut buf = [0xffu8; 2];
             lhs.read_exact(&mut buf).await?;
-            assert!(&buf == &[0x05u8, 0x02u8]);
+            assert!(buf == [0x05u8, 0x02u8]);
             lhs.write_all(&hex!("01 04 75736572 07 68756e74657232"))
                 .await?;
             lhs.read_exact(&mut buf).await?;
@@ -560,7 +560,7 @@ mod tests {
             lhs.write_all(&hex!("05 02 00 7f")).await?;
             let mut buf = [0xffu8; 2];
             lhs.read_exact(&mut buf).await?;
-            assert!(&buf == &[0x05u8, 0x00u8]);
+            assert!(buf == [0x05u8, 0x00u8]);
             Ok::<_, tokio::io::Error>(buf)
         });
         let result = handshake_auth(&mut rhs).await.unwrap();
