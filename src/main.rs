@@ -4,7 +4,6 @@ use std::sync::Arc;
 use anyhow::Context;
 use clap::{Args, Parser};
 use futures_util::future::FutureExt;
-use log::{debug, info, warn};
 use tokio::signal::unix::{SignalKind, signal};
 
 mod acl;
@@ -62,14 +61,15 @@ enum LogLevel {
     Trace,
 }
 
-impl From<LogLevel> for log::LevelFilter {
+impl From<LogLevel> for tracing_subscriber::filter::LevelFilter {
     fn from(value: LogLevel) -> Self {
+        use tracing_subscriber::filter::LevelFilter;
         match value {
-            LogLevel::Error => log::LevelFilter::Error,
-            LogLevel::Warn => log::LevelFilter::Warn,
-            LogLevel::Info => log::LevelFilter::Info,
-            LogLevel::Debug => log::LevelFilter::Debug,
-            LogLevel::Trace => log::LevelFilter::Trace,
+            LogLevel::Error => LevelFilter::ERROR,
+            LogLevel::Warn => LevelFilter::WARN,
+            LogLevel::Info => LevelFilter::INFO,
+            LogLevel::Debug => LevelFilter::DEBUG,
+            LogLevel::Trace => LevelFilter::TRACE,
         }
     }
 }
@@ -77,7 +77,7 @@ impl From<LogLevel> for log::LevelFilter {
 #[derive(Args)]
 struct LoggingOptions {
     #[clap(short = 'L', long = "log-level", default_value_t = LogLevel::Warn)]
-    /// Log level (only used if log level not set for syslog in the config)
+    /// Log level
     log_level: LogLevel,
     #[clap(short = 'E', long = "stderr")]
     /// Force logging to stderr
@@ -85,7 +85,7 @@ struct LoggingOptions {
 }
 
 async fn any_shutdown_signal() {
-    debug!("Will shut down on HUP, QUIT, INT, or TERM");
+    tracing::info!("Will shut down on HUP, QUIT, INT, or TERM");
     futures_util::future::select_all(vec![
         signal(SignalKind::hangup()).unwrap().recv().boxed(),
         signal(SignalKind::quit()).unwrap().recv().boxed(),
@@ -125,12 +125,12 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    conf.initialize_logging(&cli.logging);
+    conf.initialize_logging(&cli.logging)?;
 
     let stats = Arc::new(stats::Stats::new());
 
     if conf.expect_proxy {
-        info!("NOTE: Expecting PROXY protocol on streams");
+        tracing::info!("NOTE: Expecting PROXY protocol on streams");
     }
 
     let p = permit::Permit::new();
@@ -141,9 +141,9 @@ async fn main() -> anyhow::Result<()> {
         if stats_socket_listen_address.starts_with('/')
             || stats_socket_listen_address.starts_with('.')
         {
-            info!(
-                "Stats socket listening on {:?}",
-                stats_socket_listen_address
+            tracing::info!(
+                listen_address = stats_socket_listen_address,
+                "Stats socket listening",
             );
             let listener = stats_socket::bind_unix_listener(
                 stats_socket_listen_address,
@@ -157,9 +157,9 @@ async fn main() -> anyhow::Result<()> {
             })?;
             tokio::spawn(server.run_unix(listener));
         } else {
-            info!(
-                "Stats socket listening on {:?}",
-                stats_socket_listen_address
+            tracing::info!(
+                listen_address = stats_socket_listen_address,
+                "Stats socket listening",
             );
             let listener = tokio::net::TcpListener::bind(stats_socket_listen_address)
                 .await
@@ -178,14 +178,14 @@ async fn main() -> anyhow::Result<()> {
 
     // Shut down on signal (TODO: or if the socks server dies?)
     any_shutdown_signal().await;
-    info!("got shutdown signal; attempting graceful shutdown");
+    tracing::info!("got shutdown signal; attempting graceful shutdown");
     let shutdown_start = std::time::Instant::now();
     match p.revoke().wait_subs_timeout(conf.shutdown_timeout) {
-        Ok(_) => debug!("shutdown finished in {:?}", shutdown_start.elapsed()),
-        Err(e) => warn!(
-            "shutdown timed out after {:?}: {:?}",
-            shutdown_start.elapsed(),
-            e
+        Ok(_) => tracing::debug!(elapsed = ?shutdown_start.elapsed(), "shutdown finished"),
+        Err(err) => tracing::warn!(
+            elapsed = ?shutdown_start.elapsed(),
+            ?err,
+            "shutdown timed out",
         ),
     }
     Ok(())

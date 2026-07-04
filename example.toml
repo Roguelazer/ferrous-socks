@@ -45,8 +45,10 @@ expect-proxy = false
 # whether or not to set SO_REUSEPORT on supported platforms
 reuse-port = false
 
-# if this section isn't present, then we use env_logger and log to stderr
-# obeying the $RUST_LOG environment variable
+# if this section isn't present, then we will log to stderr
+# can send to a unix domain socket, UDP, or TCP; always sends RFC5424 messages
 #[syslog]
-#facility = "KERN"
-#level = "DEBUG"
+#facility = "LOCAL0"
+#target = { unix = "./syslog.sock" }
+#target = { network = "udp://localhost:514" }
+#target = { network = "tcp://localhost:15514" }

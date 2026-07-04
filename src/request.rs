@@ -1,6 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-use log::debug;
 use serde::Serialize;
 use tokio::net::{TcpSocket, TcpStream};
 
@@ -52,7 +51,7 @@ async fn connect_bind(
     connect_addr: IpAddr,
     connect_port: u16,
 ) -> Result<TcpStream, tokio::io::Error> {
-    debug!("connecting with explicit bind of {:?}", bind_addr);
+    tracing::trace!(?bind_addr, "connecting with explicit bind");
     let connect = SocketAddr::new(connect_addr, connect_port);
     let bind = SocketAddr::new(bind_addr, 0);
     let socket = if bind_addr.is_ipv4() {

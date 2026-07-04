@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use futures_core::stream::Stream;
 use futures_util::stream::StreamExt;
-use log::{debug, warn};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::net::UnixListener;
@@ -42,13 +41,13 @@ async fn handle_stats_connection<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + 'static,
 {
-    let dumped = stats.serialize_to_vec().await;
+    let dumped = stats.serialize_to_vec();
     match dumped {
         Ok(dumped) => {
             socket.write_all(&dumped).await?;
         }
-        Err(e) => {
-            warn!("error dumping stats: {:?}", e);
+        Err(err) => {
+            tracing::warn!(?err, "error dumping stats");
         }
     }
     Ok(())
@@ -61,8 +60,8 @@ where
     let timeout = Duration::from_secs(3);
     match tokio::time::timeout(timeout, handle_stats_connection(socket, stats)).await {
         Ok(Ok(_)) => (),
-        Ok(Err(e)) => {
-            warn!("error handling stats connection: {:?}", e);
+        Ok(Err(err)) => {
+            tracing::warn!(?err, "error handling stats connection");
         }
         Err(_) => {}
     }
@@ -99,7 +98,7 @@ impl StatsServer {
                 }),
         )
         .await;
-        debug!("stats server shut down");
+        tracing::debug!("stats server shut down");
     }
 
     pub async fn run_tcp(self, listener: TcpListener) {
