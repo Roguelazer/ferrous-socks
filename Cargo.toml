@@ -28,7 +28,6 @@ tokio = { version = "1.30", features = ["rt-multi-thread", "net", "time", "macro
 tokio-stream = { version = "0.1", features = ["net"] }
 toml = { version = "1.0", features = ["serde"] }
 parking_lot = "0.12.5"
-url = { version = "2.5.8", features = ["serde"] }
 
 [dev-dependencies]
 hex-literal = "1.1"
