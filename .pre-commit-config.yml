@@ -1,0 +1,43 @@
+# NOTE: this file is intended for use with `prek`
+repos:
+  - repo: builtin
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: check-toml
+      - id: check-yaml
+      - id: check-json
+        exclude: "tsconfig.json"
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.21.0
+    hooks:
+      - id: yamlfmt
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.46.3
+    hooks:
+      - id: typos
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.13.1-1
+    hooks:
+      - id: shfmt
+        args: ["--write", "-i", "4", "-ci"]
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+  - repo: https://github.com/hyland/github-actions-ensure-sha-pinned-actions
+    rev: 7957efb76aba0eec7580a9c0392d3e5bec381359 # v2.0.1
+    hooks:
+      - id: gha-sha-convert
+        args: ["--allowlist", "actions/*"]
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: f805888065fdb6162e1f800e50bb9460cbd223d6 # v0.37.2
+    hooks:
+      - id: check-dependabot

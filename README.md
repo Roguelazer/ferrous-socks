@@ -14,3 +14,5 @@ Features:
  - will accept any username+password authentication (and log the username)
 
 Check out [example.toml](example.toml) for an example of what the config file looks like. You can generate the default config by running `ferrous-socks --dump-config default.toml`
+
+NOTE: This repository was originally hosted at [EasyPost/ferrous-socks](https://github.com/easypost/ferrous-socks), but they seem to have rug-pulled their open-source software, so the canonical host is now here at <https://github.com/Roguelazer/ferrous-socks>.
