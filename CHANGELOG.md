@@ -1,3 +1,8 @@
+UNRELEASED
+----------
+- Move canonical repository location to <https://github.com/Roguelazer/ferrous-socks>
+- Change primary branch from `master` to `main`
+
 1.0.8
 -----
 - Bump `regex` crate for [RUSTSEC-2022-0013](https://rustsec.org/advisories/RUSTSEC-2022-0013.html)
