@@ -2,6 +2,7 @@ UNRELEASED
 ----------
 - Move canonical repository location to <https://github.com/Roguelazer/ferrous-socks>
 - Change primary branch from `master` to `main`
+- Upgrade to Rust 2024; bump MSRV to 1.88.0
 
 1.0.8
 -----

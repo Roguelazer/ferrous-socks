@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Default)]
 pub enum AclAction {
+    #[default]
     Allow,
     Reject,
 }
@@ -17,11 +19,6 @@ impl AclAction {
     }
 }
 
-impl Default for AclAction {
-    fn default() -> Self {
-        AclAction::Allow
-    }
-}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AclItem {

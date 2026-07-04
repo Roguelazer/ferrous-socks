@@ -225,7 +225,7 @@ impl Stats {
             connection_network_unreachable: self.connection_network_unreachable.load_stat(),
             bytes_server_to_client: self.bytes_server_to_client.load_stat(),
             bytes_client_to_server: self.bytes_client_to_server.load_stat(),
-            sessions: &*lock,
+            sessions: &lock,
             proxy_protocol_timeout: self.proxy_protocol_timeout.load_stat(),
         };
         serde_json::to_vec(&buf)
