@@ -2,8 +2,7 @@ use ip_network::IpNetwork;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
-#[derive(Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Default)]
 pub enum AclAction {
     #[default]
     Allow,
@@ -18,7 +17,6 @@ impl AclAction {
         }
     }
 }
-
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct AclItem {

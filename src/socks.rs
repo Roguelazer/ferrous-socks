@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use anyhow::Context;
 use byteorder::{ByteOrder, NetworkEndian};
@@ -498,7 +498,7 @@ mod tests {
     use hex_literal::hex;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    use super::{authenticate_rfc1929, handshake_auth, read_request, HandshakeResult};
+    use super::{HandshakeResult, authenticate_rfc1929, handshake_auth, read_request};
     use crate::request::{Address, Request, Version};
 
     #[tokio::test]
