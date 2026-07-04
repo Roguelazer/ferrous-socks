@@ -21,10 +21,10 @@ pub fn bind_unix_listener<P: AsRef<Path>>(
 ) -> tokio::io::Result<UnixListener> {
     let mut path_buf = path.as_ref().to_owned();
     let orig_path_buf = path_buf.clone();
-    if let Ok(metadata) = std::fs::metadata(&path_buf) {
-        if !metadata.file_type().is_socket() {
-            panic!("pre-existing non-socket file at {:?}", path_buf);
-        }
+    if let Ok(metadata) = std::fs::metadata(&path_buf)
+        && !metadata.file_type().is_socket()
+    {
+        panic!("pre-existing non-socket file at {:?}", path_buf);
     }
     let mut target_file_name = path_buf.file_name().unwrap().to_owned();
     target_file_name.push(format!(".{}", std::process::id()));

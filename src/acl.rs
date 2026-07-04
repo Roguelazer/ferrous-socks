@@ -2,8 +2,9 @@ use ip_network::IpNetwork;
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, Default)]
 pub enum AclAction {
+    #[default]
     Allow,
     Reject,
 }
@@ -14,12 +15,6 @@ impl AclAction {
             AclAction::Allow => true,
             AclAction::Reject => false,
         }
-    }
-}
-
-impl Default for AclAction {
-    fn default() -> Self {
-        AclAction::Allow
     }
 }
 

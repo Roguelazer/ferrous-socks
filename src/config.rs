@@ -66,8 +66,8 @@ pub enum SyslogFacility {
 
 impl From<SyslogFacility> for syslog::Facility {
     fn from(s: SyslogFacility) -> syslog::Facility {
-        use syslog::Facility::*;
         use SyslogFacility::*;
+        use syslog::Facility::*;
 
         match s {
             KERN => LOG_KERN,
@@ -242,10 +242,12 @@ impl RawConfig {
     }
 
     fn dump_to<W: std::io::Write>(&self, f: W) -> anyhow::Result<()> {
-        let v = toml::ser::to_vec(self)?;
-        let mut b = std::io::BufWriter::new(f);
-        b.write_all(&v)?;
-        Ok(())
+        tokio::task::block_in_place(move || {
+            let v = toml::to_string_pretty(self)?;
+            let mut b = std::io::BufWriter::new(f);
+            b.write_all(v.as_bytes())?;
+            Ok(())
+        })
     }
 
     /// Dump the given config to the path. If the path is None, will dump to stdout.
@@ -338,15 +340,10 @@ impl Config {
         self.into_raw().dump(path)
     }
 
-    pub fn initialize_logging(&self, matches: &clap::ArgMatches) {
-        let level: log::LevelFilter = matches
-            .value_of_t_or_exit::<String>("log_level")
-            .parse()
-            .expect("Invalid --log-level");
-        // this is gross but semantically equivalent to the illegal `if let Some(ref c) = self.syslog_config && !matches.is_present("stderr")`
-        if let Some(c) = (!matches.is_present("stderr"))
-            .then(|| self.syslog_config.as_ref())
-            .flatten()
+    pub fn initialize_logging(&self, options: &crate::LoggingOptions) {
+        let level: log::LevelFilter = options.log_level.into();
+        if let Some(c) = &self.syslog_config
+            && !options.stderr
         {
             c.initialize_logging(level)
         } else {
