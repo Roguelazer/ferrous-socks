@@ -109,6 +109,7 @@ exceptions = [
     # list
     #{ allow = ["Zlib"], crate = "adler32" },
 ]
+unused-allowed-license = "allow"
 
 # Some crates don't have (easily) machine readable licensing information,
 # adding a clarification entry for it allows you to manually specify the
